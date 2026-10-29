@@ -134,7 +134,11 @@ export function scoreBreakdown(
 
 // The score is the sum of the factors, so the breakdown and the score can never disagree.
 export function calculatePriorityScore(breakdown: ScoreFactor[]): number {
-  return breakdown.reduce((sum, factor) => sum + factor.points, 0);
+  let score = 0;
+  for (const factor of breakdown) {
+    score += factor.points;
+  }
+  return score;
 }
 
 export function recommendedWindow(age: number): "morning" | "afternoon" {
