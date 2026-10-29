@@ -120,6 +120,23 @@ export function recommendedWindow(age: number): "morning" | "afternoon" {
   return age >= 80 ? "morning" : "afternoon";
 }
 
+// URL parameter helpers. They return null for invalid input so the caller can respond with an error.
+
+// Missing -> 5. Must be a whole number of at least 1.
+export function parseTop(value: string | null): number | null {
+  if (value === null) return 5;
+  if (!/^\d+$/.test(value) || Number(value) < 1) return null;
+  return Number(value);
+}
+
+// Missing -> the real current time. "YYYY-MM-DD" -> midnight UTC of that day (for testing / demos).
+export function parseReferenceDate(value: string | null): Date | null {
+  if (value === null) return new Date();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const date = new Date(`${value}T00:00:00Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 // Returns every due member, highest priority first. On a holiday nobody is due.
 export function getDueMembers(
   members: Member[],

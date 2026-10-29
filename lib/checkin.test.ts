@@ -4,6 +4,8 @@ import {
   calculatePriorityScore,
   getDueMembers,
   parseCsv,
+  parseReferenceDate,
+  parseTop,
   recommendedWindow,
   toMembers,
   type Contact,
@@ -92,6 +94,17 @@ test("results are sorted by score descending, ties by member_id", () => {
   ];
   const due = getDueMembers(members, [], [], NOW);
   assert.deepEqual(due.map((m) => m.member_id), [2, 1, 3]);
+});
+
+test("parses the top and date URL parameters", () => {
+  assert.equal(parseTop(null), 5);
+  assert.equal(parseTop("3"), 3);
+  assert.equal(parseTop("0"), null);
+  assert.equal(parseTop("abc"), null);
+
+  assert.equal(parseReferenceDate("2025-11-06")?.toISOString(), "2025-11-06T00:00:00.000Z");
+  assert.equal(parseReferenceDate("06/11/2025"), null);
+  assert.equal(parseReferenceDate("2025-13-01"), null);
 });
 
 test("real data files load and produce a sorted due list", () => {
