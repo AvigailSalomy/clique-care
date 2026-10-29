@@ -7,11 +7,13 @@ import {
   parseReferenceDate,
   parseTop,
   recommendedWindow,
+  scoreBreakdown,
   toMembers,
   type Contact,
   type Member,
 } from "./checkin.ts";
 import { loadData } from "./data.ts";
+import { prepareCheckinMessage } from "./templates.ts";
 
 const NOW = new Date("2025-11-06T00:00:00Z");
 
@@ -51,10 +53,26 @@ test("parses CSV with Windows line endings and converts rows to members", () => 
 test("calculates the priority score and recommended window", () => {
   const member = makeMember({ age: 85, risk_flags: ["recent_discharge", "lives_alone"] });
   // 3 (discharge) + 2 (alone) + 1 (age) + 1 (no_answer) + 14/7 (gap) = 9
-  assert.equal(calculatePriorityScore(member, 14, "no_answer"), 9);
+  assert.equal(calculatePriorityScore(scoreBreakdown(member, 14, "no_answer")), 9);
 
   assert.equal(recommendedWindow(80), "morning");
   assert.equal(recommendedWindow(79), "afternoon");
+});
+
+test("score breakdown lists only the factors that apply, and adds up to the score", () => {
+  const member = makeMember({ age: 85, risk_flags: ["lives_alone"] });
+  const breakdown = scoreBreakdown(member, 10.5, "no_answer");
+
+  assert.deepEqual(breakdown, [
+    { label: "Lives alone", points: 2 },
+    { label: "Age 80+", points: 1 },
+    { label: "No answer last time", points: 1 },
+    { label: "10 days since last contact", points: 1.5 },
+  ]);
+  assert.equal(calculatePriorityScore(breakdown), 2 + 1 + 1 + 1.5);
+
+  // no contact record -> no time factor
+  assert.deepEqual(scoreBreakdown(makeMember(), null, null), []);
 });
 
 test("7-day rule: under 7 days is not due, exactly 7 days is due", () => {
@@ -105,6 +123,15 @@ test("parses the top and date URL parameters", () => {
   assert.equal(parseReferenceDate("2025-11-06")?.toISOString(), "2025-11-06T00:00:00.000Z");
   assert.equal(parseReferenceDate("06/11/2025"), null);
   assert.equal(parseReferenceDate("2025-13-01"), null);
+  assert.equal(parseReferenceDate("2025-02-30"), null); // impossible date
+  assert.equal(parseReferenceDate("2024-02-29")?.toISOString(), "2024-02-29T00:00:00.000Z"); // leap year
+});
+
+test("prepares a channel-specific message using only the first name", () => {
+  assert.match(prepareCheckinMessage("Ruth Cohen", "sms"), /^Hi Ruth, /);
+  assert.match(prepareCheckinMessage("Ruth Cohen", "whatsapp"), /^Hi Ruth! /);
+  assert.match(prepareCheckinMessage("Ruth Cohen", "call"), /^Hello Ruth, .*\[your name\]/);
+  assert.doesNotMatch(prepareCheckinMessage("Ruth Cohen", "sms"), /Cohen/);
 });
 
 test("real data files load and produce a sorted due list", () => {

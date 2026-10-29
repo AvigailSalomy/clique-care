@@ -1,6 +1,7 @@
 "use client"; // runs in the browser: it has state and fetches from the API
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { prepareCheckinMessage } from "../lib/templates.ts";
 
 // The shape of the JSON returned by GET /due (see app/due/route.ts).
 type DueResponse = {
@@ -12,10 +13,18 @@ type DueResponse = {
     full_name: string;
     priority_score: number;
     recommended_window: "morning" | "afternoon";
+    preferred_channel: string;
+    score_breakdown: { label: string; points: number }[];
   }[];
 };
 
 const TOP_OPTIONS = [5, 10, 20, 50];
+// name: shown next to the Prepare button; messageLabel: shown above the prepared message
+const CHANNELS: Record<string, { name: string; messageLabel: string }> = {
+  call: { name: "Call", messageLabel: "Call script" },
+  sms: { name: "SMS", messageLabel: "SMS message" },
+  whatsapp: { name: "WhatsApp", messageLabel: "WhatsApp message" },
+};
 const SAMPLE_DATE = "2025-11-06"; // the provided data files are from Oct–Nov 2025
 
 function formatDate(isoDate: string): string {
@@ -42,6 +51,28 @@ export default function Dashboard() {
   const [date, setDate] = useState(""); // "" means today
   const [data, setData] = useState<DueResponse | null>(null);
   const [error, setError] = useState("");
+  const [prepareId, setPrepareId] = useState<number | null>(null); // member whose message is shown
+  const [scoreId, setScoreId] = useState<number | null>(null); // member whose score breakdown is shown
+  const [copiedId, setCopiedId] = useState<number | null>(null); // member whose message was copied
+
+  // Only one message and one breakdown are open at a time; clicking again closes them.
+  function togglePrepare(memberId: number) {
+    setPrepareId(prepareId === memberId ? null : memberId);
+    setCopiedId(null);
+  }
+
+  function toggleScore(memberId: number) {
+    setScoreId(scoreId === memberId ? null : memberId);
+  }
+
+  // Remembers which member was copied, so "Copied ✓" never shows on another member's message.
+  // If copying fails (e.g. clipboard blocked), the button stays "Copy" and the text can be selected manually.
+  function copyMessage(memberId: number, text: string) {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => setCopiedId(memberId))
+      .catch(() => setCopiedId(null));
+  }
 
   // Re-fetch from the API whenever the controls change.
   useEffect(() => {
@@ -151,28 +182,91 @@ export default function Dashboard() {
                   <th>Name</th>
                   <th>Priority score</th>
                   <th>Recommended window</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {data.members.map((member) => (
-                  <tr key={member.member_id}>
-                    <td className="muted">#{member.member_id}</td>
-                    <td className="name">{member.full_name}</td>
-                    <td>
-                      <div className="score">
-                        <span className="score-value">{member.priority_score.toFixed(1)}</span>
-                        <span className="score-bar">
-                          <span style={{ width: `${(member.priority_score / maxScore) * 100}%` }} />
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge ${member.recommended_window}`}>
-                        {member.recommended_window}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {data.members.map((member) => {
+                  const isPrepareOpen = prepareId === member.member_id;
+                  const isScoreOpen = scoreId === member.member_id;
+                  const message = prepareCheckinMessage(member.full_name, member.preferred_channel);
+
+                  // Fragment lets each member render up to three rows: the member, and
+                  // (optionally) the score breakdown and the prepared message below it.
+                  return (
+                    <Fragment key={member.member_id}>
+                      <tr className={isPrepareOpen || isScoreOpen ? "open" : undefined}>
+                        <td className="muted">#{member.member_id}</td>
+                        <td className="name">{member.full_name}</td>
+                        <td>
+                          <div className="score">
+                            <span className="score-value">{member.priority_score.toFixed(1)}</span>
+                            <button
+                              className="icon-button"
+                              onClick={() => toggleScore(member.member_id)}
+                              aria-label="Show score breakdown"
+                              aria-expanded={isScoreOpen}
+                            >
+                              ⓘ
+                            </button>
+                            <span className="score-bar">
+                              <span style={{ width: `${(member.priority_score / maxScore) * 100}%` }} />
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${member.recommended_window}`}>
+                            {member.recommended_window}
+                          </span>
+                        </td>
+                        <td>
+                          <div className="actions">
+                            <span className="channel">{CHANNELS[member.preferred_channel].name}</span>
+                            <button className="button small" onClick={() => togglePrepare(member.member_id)}>
+                              {isPrepareOpen ? "Close" : "Prepare check-in"}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                      {isScoreOpen && (
+                        <tr className="panel-row">
+                          <td colSpan={5}>
+                            <div className="panel">
+                              <span className="label">Score breakdown</span>
+                              <ul className="breakdown">
+                                {member.score_breakdown.map((factor) => (
+                                  <li key={factor.label}>
+                                    <span>{factor.label}</span>
+                                    <span>+{factor.points.toFixed(1)}</span>
+                                  </li>
+                                ))}
+                                <li className="breakdown-total">
+                                  <span>Priority score</span>
+                                  <span>{member.priority_score.toFixed(1)}</span>
+                                </li>
+                              </ul>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      {isPrepareOpen && (
+                        <tr className="panel-row">
+                          <td colSpan={5}>
+                            <div className="panel">
+                              <div className="panel-header">
+                                <span className="label">{CHANNELS[member.preferred_channel].messageLabel}</span>
+                                <button className="button small" onClick={() => copyMessage(member.member_id, message)}>
+                                  {copiedId === member.member_id ? "Copied ✓" : "Copy"}
+                                </button>
+                              </div>
+                              <p className="prepare-text">{message}</p>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>

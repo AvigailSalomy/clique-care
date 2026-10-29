@@ -207,9 +207,19 @@ table {
 
 th,
 td {
-  padding: 14px 24px;
+  padding: 14px 16px;
   text-align: left;
   white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  padding-left: 24px;
+}
+
+th:last-child,
+td:last-child {
+  padding-right: 24px;
 }
 
 th {
@@ -247,7 +257,7 @@ tbody tr:hover {
 }
 
 .score-bar {
-  width: 120px;
+  width: 80px;
   height: 6px;
   border-radius: 999px;
   background: var(--primary-soft);
@@ -278,6 +288,110 @@ tbody tr:hover {
 .badge.afternoon {
   background: var(--afternoon-bg);
   color: var(--afternoon-text);
+}
+
+/* Prepare Check-in */
+
+.button.small {
+  height: 32px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+}
+
+.channel {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+tbody tr.open td {
+  background: var(--primary-soft);
+}
+
+/* Expandable rows (score breakdown and prepared message) */
+
+/* a panel row sits right under its member row, so it has no border between them */
+tbody tr.panel-row td {
+  border-top: none;
+  padding-top: 0;
+  background: var(--primary-soft);
+  white-space: normal;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.prepare-text {
+  max-width: 640px;
+  line-height: 1.6;
+}
+
+.icon-button {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.icon-button:hover,
+.icon-button[aria-expanded="true"] {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.icon-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.breakdown {
+  max-width: 360px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breakdown li {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.breakdown-total {
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  font-weight: 600;
+}
+
+.breakdown-total span {
+  padding-top: 4px;
 }
 
 /* Empty, loading and error states */

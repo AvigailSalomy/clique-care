@@ -22,12 +22,18 @@ export function GET(request: NextRequest) {
   return Response.json({
     date: now.toISOString().slice(0, 10),
     is_holiday: isHoliday(now, holidays),
-    total_due: due.length,
+    total_due: due.length, // counted before slicing, so the dashboard can show "35 due, showing 5"
     members: due.slice(0, top).map((member) => ({
       member_id: member.member_id,
       full_name: member.full_name,
       priority_score: Math.round(member.priority_score * 10) / 10, // one decimal, like the README example
       recommended_window: member.recommended_window,
+      // extra fields for the dashboard: "Prepare Check-in" and the score breakdown
+      preferred_channel: member.preferred_channel,
+      score_breakdown: member.score_breakdown.map((factor) => ({
+        label: factor.label,
+        points: Math.round(factor.points * 10) / 10,
+      })),
     })),
   });
 }

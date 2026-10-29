@@ -15,6 +15,11 @@ export type Contact = {
   outcome: string;
 };
 
+export type ScoreFactor = {
+  label: string;
+  points: number;
+};
+
 export type DueMember = {
   member_id: number;
   full_name: string;
@@ -24,6 +29,7 @@ export type DueMember = {
   days_since_last_contact: number | null; // null = no contact record yet
   last_outcome: string | null;
   priority_score: number;
+  score_breakdown: ScoreFactor[];
   recommended_window: "morning" | "afternoon";
 };
 
@@ -71,6 +77,7 @@ export function toContacts(rows: Record<string, string>[]): Contact[] {
 }
 
 // Compares the UTC calendar date of "now" (YYYY-MM-DD) with the holiday list.
+// UTC is used because the contact timestamps in the data are UTC.
 export function isHoliday(now: Date, holidays: string[]): boolean {
   return holidays.includes(now.toISOString().slice(0, 10));
 }
@@ -101,19 +108,33 @@ export function isDue(daysSinceLastContact: number | null): boolean {
   return daysSinceLastContact === null || daysSinceLastContact >= MIN_DAYS_BETWEEN_CHECKINS;
 }
 
-// No contact record -> no gap bonus (assumption documented in the README).
-export function calculatePriorityScore(
+// The scoring rules, as a list of the factors that apply to this member.
+// The gap bonus (days / 7) adds about one point per week without contact.
+// No contact record -> no gap bonus, because there is no gap to measure. These members
+// still appear in the list, but are ranked by their other factors instead of being
+// forced to the top (assumption documented in the README).
+export function scoreBreakdown(
   member: Member,
   daysSinceLastContact: number | null,
   lastOutcome: string | null,
-): number {
-  let score = 0;
-  if (member.risk_flags.includes("recent_discharge")) score += 3;
-  if (member.risk_flags.includes("lives_alone")) score += 2;
-  if (member.age >= 80) score += 1;
-  if (lastOutcome === "no_answer") score += 1;
-  if (daysSinceLastContact !== null) score += daysSinceLastContact / 7;
-  return score;
+): ScoreFactor[] {
+  const factors: ScoreFactor[] = [];
+  if (member.risk_flags.includes("recent_discharge")) factors.push({ label: "Recent discharge", points: 3 });
+  if (member.risk_flags.includes("lives_alone")) factors.push({ label: "Lives alone", points: 2 });
+  if (member.age >= 80) factors.push({ label: "Age 80+", points: 1 });
+  if (lastOutcome === "no_answer") factors.push({ label: "No answer last time", points: 1 });
+  if (daysSinceLastContact !== null) {
+    factors.push({
+      label: `${Math.floor(daysSinceLastContact)} days since last contact`,
+      points: daysSinceLastContact / 7,
+    });
+  }
+  return factors;
+}
+
+// The score is the sum of the factors, so the breakdown and the score can never disagree.
+export function calculatePriorityScore(breakdown: ScoreFactor[]): number {
+  return breakdown.reduce((sum, factor) => sum + factor.points, 0);
 }
 
 export function recommendedWindow(age: number): "morning" | "afternoon" {
@@ -134,10 +155,18 @@ export function parseReferenceDate(value: string | null): Date | null {
   if (value === null) return new Date();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  // JavaScript rolls impossible dates over (2025-02-30 becomes 2025-03-02),
+  // so the date must still match the input to be valid.
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return null;
+  return date;
 }
 
-// Returns every due member, highest priority first. On a holiday nobody is due.
+// Returns every due member, highest priority first.
+// A member is due when all of these are true:
+//   1. today is not a holiday (on a holiday nobody is due),
+//   2. their preferred channel is one we can use,
+//   3. they were last contacted 7+ days ago, or have no contact record at all.
+// Slicing to "top" is left to the caller, so it can also show the total count.
 export function getDueMembers(
   members: Member[],
   contacts: Contact[],
@@ -157,11 +186,13 @@ export function getDueMembers(
     if (!isDue(days)) continue;
 
     const outcome = contact ? contact.outcome : null;
+    const breakdown = scoreBreakdown(member, days, outcome);
     dueMembers.push({
       ...member,
       days_since_last_contact: days,
       last_outcome: outcome,
-      priority_score: calculatePriorityScore(member, days, outcome),
+      priority_score: calculatePriorityScore(breakdown),
+      score_breakdown: breakdown,
       recommended_window: recommendedWindow(member.age),
     });
   }
